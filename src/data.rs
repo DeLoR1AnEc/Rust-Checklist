@@ -76,18 +76,34 @@ pub enum Node {
   Entry(Entry),
 }
 
+impl Node {
+  pub fn as_container_mut(&mut self) -> Option<&mut Container> {
+    match self {
+      Node::Container(c) => Some(c),
+      _ => None,
+    }
+  }
+
+  pub fn as_entry_mut(&mut self) -> Option<&mut Entry> {
+    match self {
+      Node::Entry(e) => Some(e),
+      _ => None,
+    }
+  }
+}
+
 impl HasMeta for Node {
   fn meta(&self) -> &StructMeta {
     match self {
-      Node::Entry(entry) => entry.meta(),
-      Node::Container(container) => container.meta(),
+      Node::Entry(e) => e.meta(),
+      Node::Container(c) => c.meta(),
     }
   }
 
   fn meta_mut(&mut self) -> &mut StructMeta {
     match self {
-      Node::Entry(entry) => entry.meta_mut(),
-      Node::Container(container) => container.meta_mut(),
+      Node::Entry(e) => e.meta_mut(),
+      Node::Container(c) => c.meta_mut(),
     }
   }
 }
@@ -180,12 +196,40 @@ impl Container {
     }
   }
 
-  pub fn node(&mut self, id: &Uuid) -> Option<&mut Node> {
+  pub fn get_node(&mut self, id: &Uuid) -> Option<&mut Node> {
     self.items.get_mut(id)
   }
 
-  // {...}
+  pub fn add_node(&mut self, node: Node) {
+    let id = *node.id();
+    self.items.insert(id, node);
+    self.order.push(id);
+  }
 
+  pub fn remove_node(&mut self, id: &Uuid) {
+    self.items.remove(id);
+    self.order.retain(|x| x != id);
+  }
+
+  pub fn move_node(&mut self, id: &Uuid, new_pos: usize) {
+    if let Some(pos) = self.order.iter().position(|x| x == id) {
+      self.order.remove(pos);
+    }
+
+    self.order.insert(new_pos, *id);
+  }
+
+  pub fn swap_nodes(&mut self, id1: &Uuid, id2: &Uuid) {
+    if let (Some(pos1), Some(pos2)) = (
+      self.order.iter().position(|x| x == id1),
+      self.order.iter().position(|y| y == id2)
+    ) {
+      self.order[pos1] = *id2;
+      self.order[pos2] = *id1;
+    }
+  }
+
+  // {...}
 }
 
 impl HasMeta for Container {
