@@ -67,11 +67,11 @@ impl Node {
     }
   }
 
-  pub fn id(&self) -> &Uuid {
+  pub fn get_id(&self) -> &Uuid {
     &self.meta().id
   }
 
-  pub fn name(&self) -> &str {
+  pub fn get_name(&self) -> &str {
     &self.meta().name
   }
 
@@ -79,7 +79,7 @@ impl Node {
     self.meta_mut().name = name.into();
   }
 
-  pub fn desc(&self) -> &str {
+  pub fn get_desc(&self) -> &str {
     &self.meta().desc
   }
 
@@ -185,7 +185,7 @@ pub struct Tree {
 impl Tree {
   pub fn new(root: Container) -> Self {
     let root_node = Node::Container(root);
-    let root_id = *root_node.id();
+    let root_id = *root_node.get_id();
 
     let mut nodes = HashMap::<Uuid, Node>::new();
     nodes.insert(root_id, root_node);
@@ -205,7 +205,7 @@ impl Tree {
     Ok(node)
   }
 
-  pub fn get_entry(&mut self, node_id: &Uuid) -> Result<&mut Entry, String> {
+  fn get_entry(&mut self, node_id: &Uuid) -> Result<&mut Entry, String> {
     let entry = self.get_node(node_id)?
       .get_entry()
       .ok_or_else(|| format!("Node {} must be an entry", node_id))?;
@@ -230,6 +230,13 @@ impl Tree {
     Ok(parent_id)
   }
 
+  pub fn get_parent_node(&mut self, node_id: &Uuid) -> Result <&mut Node, String> {
+    let parent_id = *self.get_parent_id(node_id)?;
+
+    let parent_node = self.get_node(&parent_id)?;
+    Ok(parent_node)
+  }
+
   fn get_parent_container(&mut self, node_id: &Uuid) -> Result<&mut Container, String> {
     let parent_id = *self.get_parent_id(node_id)?;
 
@@ -248,7 +255,7 @@ impl Tree {
 
   // Basic Nodes operations
   pub fn add_node(&mut self, parent_id: &Uuid, node: Node) -> Result<(), String> {
-    let node_id = *node.id();
+    let node_id = *node.get_id();
 
     let container = self.get_container(parent_id)?;
     container.add_order(&node_id);
