@@ -30,14 +30,28 @@ pub enum Node {
 }
 
 impl Node {
-  pub fn get_entry(&mut self) -> Option<&mut Entry> {
+  pub fn get_entry(&self) -> Option<&Entry> {
     match self {
       Node::Entry(e) => Some(e),
       _ => None,
     }
   }
 
-  pub fn get_container(&mut self) -> Option<&mut Container> {
+  pub fn get_entry_mut(&mut self) -> Option<&mut Entry> {
+    match self {
+      Node::Entry(e) => Some(e),
+      _ => None,
+    }
+  }
+
+  pub fn get_container(&self) -> Option<&Container> {
+    match self {
+      Node::Container(c) => Some(c),
+      _ => None,
+    }
+  }
+
+  pub fn get_container_mut(&mut self) -> Option<&mut Container> {
     match self {
       Node::Container(c) => Some(c),
       _ => None,
@@ -198,14 +212,21 @@ impl Tree {
   }
 
   // Utility
-  pub fn get_node(&mut self, node_id: &Uuid) -> Result<&mut Node, String> {
+  pub fn get_node(&self, node_id: &Uuid) -> Result<&Node, String> {
+    let node = self.nodes.get(node_id)
+      .ok_or_else(|| format!("Node {} not found", node_id))?;
+
+    Ok(node)
+  }
+
+  pub fn get_node_mut(&mut self, node_id: &Uuid) -> Result<&mut Node, String> {
     let node = self.nodes.get_mut(node_id)
       .ok_or_else(|| format!("Node {} not found", node_id))?;
 
     Ok(node)
   }
 
-  fn get_entry(&mut self, node_id: &Uuid) -> Result<&mut Entry, String> {
+  fn get_entry(&self, node_id: &Uuid) -> Result<&Entry, String> {
     let entry = self.get_node(node_id)?
       .get_entry()
       .ok_or_else(|| format!("Node {} must be an entry", node_id))?;
@@ -213,9 +234,25 @@ impl Tree {
     Ok(entry)
   }
 
-  fn get_container(&mut self, node_id: &Uuid) -> Result<&mut Container, String> {
+  fn get_entry_mut(&mut self, node_id: &Uuid) -> Result<&mut Entry, String> {
+    let entry = self.get_node_mut(node_id)?
+      .get_entry_mut()
+      .ok_or_else(|| format!("Node {} must be an entry", node_id))?;
+
+    Ok(entry)
+  }
+
+  fn get_container(&self, node_id: &Uuid) -> Result<&Container, String> {
     let container = self.get_node(node_id)?
       .get_container()
+      .ok_or_else(|| format!("Node {} must be a container", node_id))?;
+
+    Ok(container)
+  }
+
+  fn get_container_mut(&mut self, node_id: &Uuid) -> Result<&mut Container, String> {
+    let container = self.get_node_mut(node_id)?
+      .get_container_mut()
       .ok_or_else(|| format!("Node {} must be a container", node_id))?;
 
     Ok(container)
@@ -230,17 +267,30 @@ impl Tree {
     Ok(parent_id)
   }
 
-  pub fn get_parent_node(&mut self, node_id: &Uuid) -> Result <&mut Node, String> {
+  pub fn get_parent_node(&self, node_id: &Uuid) -> Result <&Node, String> {
     let parent_id = *self.get_parent_id(node_id)?;
 
     let parent_node = self.get_node(&parent_id)?;
     Ok(parent_node)
   }
 
-  fn get_parent_container(&mut self, node_id: &Uuid) -> Result<&mut Container, String> {
+  pub fn get_parent_node_mut(&mut self, node_id: &Uuid) -> Result <&mut Node, String> {
+    let parent_id = *self.get_parent_id(node_id)?;
+
+    let parent_node = self.get_node_mut(&parent_id)?;
+    Ok(parent_node)
+  }
+
+  fn get_parent_container(&self, node_id: &Uuid) -> Result<&Container, String> {
     let parent_id = *self.get_parent_id(node_id)?;
 
     let container = self.get_container(&parent_id)?;
+    Ok(container)
+  }
+  fn get_parent_container_mut(&mut self, node_id: &Uuid) -> Result<&mut Container, String> {
+    let parent_id = *self.get_parent_id(node_id)?;
+
+    let container = self.get_container_mut(&parent_id)?;
     Ok(container)
   }
 
@@ -251,13 +301,31 @@ impl Tree {
     Ok(parent_id1 == parent_id2)
   }
 
-  // --- The interesting part ---
+  #[allow(unused_mut, unused_variables)]
+  pub fn is_descendant(self, node_id: &Uuid, candidate_ancestor_id: &Uuid) -> Result<i32, String> {
+    let mut depth = 0;
+    let mut id = node_id;
+
+    loop {
+      if *id == self.root {
+        return Ok(0);
+      }
+
+      let ancestor_id = self.get_parent_id(id)?;
+      if ancestor_id == candidate_ancestor_id {
+        return Ok(depth);
+      }
+
+      depth += 1;
+      id = ancestor_id;
+    }
+  }
 
   // Basic Nodes operations
-  pub fn add_node(&mut self, parent_id: &Uuid, node: Node) -> Result<(), String> {
+  pub fn add_node(&mut self, node: Node, parent_id: &Uuid) -> Result<(), String> {
     let node_id = *node.get_id();
 
-    let container = self.get_container(parent_id)?;
+    let container = self.get_container_mut(parent_id)?;
     container.add_order(&node_id);
 
     self.nodes.insert(node_id, node);
@@ -267,7 +335,7 @@ impl Tree {
   }
 
   pub fn remove_node(&mut self, node_id: &Uuid) -> Result<(), String> {
-    let container = self.get_parent_container(node_id)?;
+    let container = self.get_parent_container_mut(node_id)?;
     container.remove_order(node_id);
 
     self.nodes.remove(node_id);
@@ -277,7 +345,7 @@ impl Tree {
   }
 
   pub fn move_node(&mut self, node_id: &Uuid, new_pos: usize) -> Result<(), String> {
-    let container = self.get_parent_container(node_id)?;
+    let container = self.get_parent_container_mut(node_id)?;
     container.move_order(node_id, new_pos);
 
     Ok(())
@@ -287,23 +355,23 @@ impl Tree {
     if !self.compare_parents(node_id1, node_id2)? {Err("Can only swap nodes with the same parent")?}
     if node_id1 == node_id2 {Err("Cannot swap a node with itself")?}
 
-    let container = self.get_parent_container(node_id1)?;
+    let container = self.get_parent_container_mut(node_id1)?;
     container.swap_order(node_id1, node_id2);
 
     Ok(())
   }
 
-  pub fn change_parent(&mut self, new_parent_id: &Uuid, node_id: &Uuid) -> Result<(), String> {
+  pub fn change_parent(&mut self, node_id: &Uuid, new_parent_id: &Uuid) -> Result<(), String> {
     let parent_id = self.get_parent_id(node_id)?;
     if parent_id == new_parent_id {Err(format!("Node already is inside of container {}", parent_id))?}
 
     {
-      let container = self.get_parent_container(node_id)?;
+      let container = self.get_parent_container_mut(node_id)?;
       container.remove_order(node_id);
     }
 
     {
-      let new_container = self.get_container(new_parent_id)?;
+      let new_container = self.get_container_mut(new_parent_id)?;
       new_container.add_order(node_id);
     }
 
@@ -313,7 +381,7 @@ impl Tree {
     Ok(())
   }
 
-  pub fn get_children_ids(&mut self, parent_id: &Uuid) -> Result<Vec<&Uuid>, String> {
+  pub fn get_children_ids(&self, parent_id: &Uuid) -> Result<Vec<&Uuid>, String> {
     let container = self.get_container(parent_id)?;
 
     let children = container.order.iter().collect();
@@ -328,24 +396,24 @@ impl Tree {
   }
 
   pub fn set_entry_state(&mut self, node_id: &Uuid, state: &EntryState) -> Result<(), String> {
-    let entry = self.get_entry(node_id)?;
+    let entry = self.get_entry_mut(node_id)?;
 
     entry.state = state.clone();
     Ok(())
   }
 
   pub fn entry_state_next(&mut self, node_id: &Uuid) -> Result<&EntryState, String> {
-    let entry = self.get_entry(node_id)?;
+    let entry = self.get_entry_mut(node_id)?;
 
-    entry.state.next();
+    entry.state = entry.state.next();
 
     Ok(&entry.state)
   }
 
   pub fn entry_state_prev(&mut self, node_id: &Uuid) -> Result<&EntryState, String> {
-    let entry = self.get_entry(node_id)?;
+    let entry = self.get_entry_mut(node_id)?;
 
-    entry.state.prev();
+    entry.state = entry.state.prev();
 
     Ok(&entry.state)
   }
