@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use std::io::{self, Write};
 use tui::draw;
 
